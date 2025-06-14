@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.env
+*.m3u
+*.xml
+*.log
+venv/
+dist/
+*.db
+

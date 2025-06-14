@@ -1,0 +1,13 @@
+services:
+  iptv-server:
+    build: .
+    container_name: iptv-streamer
+    ports:
+      - "3037:3037"
+    volumes:
+      - ./playlist_local.m3u:/app/playlist_local.m3u:ro
+      - ./config.yml:/app/config.yml:ro
+      - .:/app
+    restart: unless-stopped
+
+
