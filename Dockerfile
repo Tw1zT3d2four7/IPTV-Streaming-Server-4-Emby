@@ -7,15 +7,8 @@ WORKDIR /app
 # Copy project files
 COPY . .
 
-# Copy custom ffmpeg from host into container
-# NOTE: This assumes you're building the image on the same host that has ffmpeg
-COPY /usr/local/bin/ffmpeg /usr/local/bin/ffmpeg
-
-# Make sure ffmpeg is executable
-RUN chmod +x /usr/local/bin/ffmpeg
-
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python dependencies if you have any
+ RUN pip install -r requirements.txt
 
 # Make app.py executable
 RUN chmod +x app.py
