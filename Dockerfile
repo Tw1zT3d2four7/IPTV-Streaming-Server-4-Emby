@@ -5,9 +5,6 @@ WORKDIR /app
 # Copy all your app files
 COPY . .
 
-# Copy the ffmpeg binary from local folder into image
-COPY ffmpeg /usr/local/bin/ffmpeg
-
 # Make ffmpeg executable
 RUN chmod +x /usr/local/bin/ffmpeg
 
