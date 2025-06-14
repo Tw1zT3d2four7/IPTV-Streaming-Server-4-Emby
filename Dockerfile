@@ -25,4 +25,3 @@ EXPOSE 3037
 
 # Run app.py directly
 CMD ["./app.py"]
-
