@@ -17,7 +17,7 @@ FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 # FFmpeg profiles dict
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
-        "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
+        'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
@@ -34,7 +34,7 @@ FFMPEG_PROFILES = {
         "-bsf:v", "hevc_mp4toannexb", "pipe:1"
     ],
     "h264_nvenc": [
-        "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
+        'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
@@ -51,7 +51,7 @@ FFMPEG_PROFILES = {
         "-bsf:v", "h264_mp4toannexb", "pipe:1"
     ],
     # Add other profiles here as needed (amf, vaapi, qsv, software_libx264, software_libx265) ...
-    "software_libx264": [
+        'ffmpeg', "software_libx264": [
         "-hide_banner", "-loglevel", "info",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4294",
         "-analyzeduration", "2000000", "-probesize", "10000000",
