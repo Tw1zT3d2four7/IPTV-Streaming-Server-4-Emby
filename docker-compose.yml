@@ -9,3 +9,4 @@ services:
       - ./playlist_local.m3u:/app/playlist_local.m3u:ro  # Mount the playlist
       - .:/app
     restart: unless-stopped
+
