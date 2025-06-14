@@ -1,13 +1,11 @@
 services:
-  iptv-server:
-    build: .
-    container_name: iptv-streamer
+  iptv-streaming-server:
+    image: ghcr.io/tw1zt3d2four7/iptv-streaming-server-4-emby:latest
+    container_name: iptv-streaming-server
     ports:
-      - "3037:3037"
+      - "3037:3037"   # Maps container port 3037 to host
     volumes:
-      - ./playlist_local.m3u:/app/playlist_local.m3u:ro
-      - ./config.yml:/app/config.yml:ro
+      - ./config.yml:/app/config.yml:ro   # Mount your config file into the container
+      - ./playlist_local.m3u:/app/playlist_local.m3u:ro  # Mount the playlist
       - .:/app
     restart: unless-stopped
-
-
