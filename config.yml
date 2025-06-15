@@ -9,5 +9,5 @@ server:
 # Leave empty to auto-detect hardware
 # Options: hevc_nvenc, h264_nvenc, hevc_amf, h264_amf, hevc_vaapi,
 #          h264_vaapi, hevc_qsv, h264_qsv, software_libx265, software_libx264
-ffmpeg_profile: "software_libx264"
+ffmpeg_profile: "hevc_nvenc"
 
