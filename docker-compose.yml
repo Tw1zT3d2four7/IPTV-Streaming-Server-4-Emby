@@ -2,8 +2,10 @@ services:
   iptv-streaming-server:
     image: ghcr.io/tw1zt3d2four7/iptv-streaming-server-4-emby:latest
     container_name: iptv-streaming-server
+    pull_policy: always
+    restart: unless-stopped
     ports:
-      - "3037:3037"
+      - "192.168.1.113037:3037"
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
@@ -11,8 +13,13 @@ services:
       - ./IPTV-Streaming-Server-4-Emby-main/config.yml:/app/config.yml:ro
       - ./IPTV-Streaming-Server-4-Emby-main/playlist_local.m3u:/app/playlist_local.m3u:ro
       - /usr/local/bin/ffmpeg:/usr/local/bin/ffmpeg:ro  # Your custom FFmpeg
-    restart: unless-stopped
-    gpus: all  # Enable NVIDIA GPU
-    # Optional: for Intel hardware acceleration too
+    runtime: nvidia
     devices:
       - /dev/dri:/dev/dri
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
