@@ -3,6 +3,7 @@ FROM ubuntu:22.04 AS ffmpeg-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Install all required build dependencies
 RUN apt update && apt install -y \
   build-essential git pkg-config cmake meson ninja-build yasm nasm \
   libfdk-aac-dev libvpx-dev libx264-dev libx265-dev libnuma-dev \
@@ -11,12 +12,13 @@ RUN apt update && apt install -y \
   libssl-dev \
   nvidia-cuda-toolkit \
   libdrm-dev libxcb-shape0-dev libxcb-xfixes0-dev libasound2-dev \
-  libxv-dev wget curl unzip autoconf automake libtool
+  libxv-dev wget curl unzip autoconf automake libtool python3-pip && \
+  pip install meson
 
 # Build libvmaf
 RUN git clone https://github.com/Netflix/vmaf.git && \
     cd vmaf/libvmaf && \
-    meson build --buildtype release && \
+    meson setup build --buildtype release && \
     ninja -C build && \
     ninja -C build install && \
     ldconfig
@@ -42,25 +44,30 @@ RUN git clone https://github.com/ffmpeg/ffmpeg.git && \
     make -j$(nproc) && make install
 
 # ---------- Stage 2: Final Image ----------
-FROM python:3.11
+FROM python:3.11-slim
 
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install only runtime dependencies
+RUN apt update && apt install -y libnuma1 libva-drm2 libx11-6 libxext6 libxv1 libasound2 libdrm2 libcuda1 libnvidia-encode1 && apt clean
+
+# Set working directory
 WORKDIR /app
 
-# Copy built ffmpeg from build stage
+# Copy built ffmpeg
 COPY --from=ffmpeg-builder /ffmpeg-build/bin/ffmpeg /usr/local/bin/ffmpeg
 
 # Copy your project files
 COPY . .
 
-# Make sure ffmpeg is executable
-RUN chmod +x /usr/local/bin/ffmpeg
+# Make sure ffmpeg and app.py are executable
+RUN chmod +x /usr/local/bin/ffmpeg && chmod +x app.py
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Make app.py executable
-RUN chmod +x app.py
-
+# Expose your app's port
 EXPOSE 3037
 
+# Start your app
 CMD ["./app.py"]
