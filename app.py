@@ -10,6 +10,7 @@ import yaml
 import os
 import threading
 import queue
+import signal
 
 # Load config
 with open("config.yml", "r") as f:
@@ -20,7 +21,6 @@ SERVER_HOST = config.get("server", {}).get("host", "0.0.0.0")
 SERVER_PORT = config.get("server", {}).get("port", 3037)
 FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 
-# FFmpeg profiles dict
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
@@ -85,9 +85,8 @@ FFMPEG_PROFILES = {
 }
 
 def detect_hardware_encoder():
-    """Detects hardware encoder available on the host machine."""
     if os.path.exists("/dev/nvidia0"):
-        return "hevc_nvenc"  # Or "h264_nvenc" if preferred
+        return "hevc_nvenc"
     if os.path.exists("/dev/dri/renderD128"):
         return "h264_qsv"
     return "software_libx264"
@@ -112,19 +111,16 @@ def playlist():
     except FileNotFoundError:
         return "M3U file not found", 404
 
-# --- CONCURRENT STREAM SHARING SETUP START ---
-
 class StreamProcess:
     def __init__(self, stream_url, cmd):
         self.stream_url = stream_url
         self.cmd = cmd
-        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
         self.clients = 0
         self.lock = threading.Lock()
-        self.buffer = queue.Queue(maxsize=100)  # Buffer chunks for clients
+        self.buffer = queue.Queue(maxsize=100)
         self.running = True
-        self.thread = threading.Thread(target=self._read_output)
-        self.thread.daemon = True
+        self.thread = threading.Thread(target=self._read_output, daemon=True)
         self.thread.start()
 
     def _read_output(self):
@@ -136,35 +132,21 @@ class StreamProcess:
                 try:
                     self.buffer.put(chunk, timeout=1)
                 except queue.Full:
-                    pass
+                    continue
         finally:
-            self.running = False
-            try:
-                self.process.kill()
-            except Exception:
-                pass
+            self.shutdown()
 
     def get_stream_generator(self):
-        q = queue.Queue()
-
-        def client_reader():
+        def generator():
             try:
                 while self.running:
                     try:
                         chunk = self.buffer.get(timeout=5)
+                        yield chunk
                     except queue.Empty:
-                        # Timeout, assume stream ended
                         break
-                    yield chunk
-            except (GeneratorExit, ConnectionError):
-                # Client disconnected abruptly
-                pass
             finally:
                 self.decrement_clients()
-
-        def generator():
-            for chunk in client_reader():
-                yield chunk
 
         self.increment_clients()
         return generator()
@@ -180,13 +162,16 @@ class StreamProcess:
                 self.shutdown()
 
     def shutdown(self):
+        if not self.running:
+            return
         self.running = False
-        try:
-            self.process.kill()
-        except Exception:
-            pass
         with self.lock:
             self.clients = 0
+        try:
+            self.process.send_signal(signal.SIGINT)
+            self.process.wait(timeout=5)
+        except Exception:
+            self.process.kill()
 
 stream_processes = {}
 stream_processes_lock = threading.Lock()
@@ -206,7 +191,5 @@ def stream():
 
     return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
 
-# --- CONCURRENT STREAM SHARING SETUP END ---
-
 if __name__ == "__main__":
-    app.run(host=SERVER_HOST, port=SERVER_PORT)
+    app.run(host=SERVER_HOST, port=SERVER_PORT, threaded=True)
