@@ -1,7 +1,7 @@
-# Use NVIDIA CUDA base image
+# Use NVIDIA base image with CUDA support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Install base tools and all dependencies including VAAPI libs and drivers
+# Install system dependencies and hardware acceleration libraries
 RUN apt-get update && apt-get install -y \
     git build-essential pkg-config cmake \
     yasm nasm libtool autoconf automake \
@@ -10,18 +10,18 @@ RUN apt-get update && apt-get install -y \
     libssl-dev libass-dev python3-pip \
     wget curl unzip \
     libva-dev vainfo i965-va-driver libdrm-dev \
-    libmfx1 intel-media-va-driver-non-free \
-    vainfo mesa-va-drivers \
+    intel-media-va-driver-non-free libmfx-dev \
+    mesa-va-drivers \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies (gunicorn included in requirements)
+# Install Python packages
 COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# Set working directory for building nv-codec-headers
+# Set working directory for build
 WORKDIR /opt
 
-# Clone and install nv-codec-headers for NVIDIA hw accel
+# Build nv-codec-headers (required for CUDA/NVENC)
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
@@ -30,9 +30,8 @@ RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
 # Clone FFmpeg source
 RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
+# Build and install FFmpeg with full support
 WORKDIR /opt/ffmpeg
-
-# Configure FFmpeg with all needed options including hardware acceleration
 RUN ./configure \
     --prefix=/usr/local \
     --enable-gpl \
@@ -47,19 +46,30 @@ RUN ./configure \
     --enable-libopus \
     --enable-openssl \
     --enable-libass \
-    --enable-protocol=https \
     --enable-libmfx \
     --enable-vaapi \
+    --enable-protocol=https \
     --enable-shared && \
     make -j$(nproc) && \
     make install && \
     ldconfig
 
-# Set workdir for your app
+# Set working directory for app
 WORKDIR /app
 
-# Copy app files (adjust as needed)
+# Copy your application code
 COPY . .
 
-# Expose port and run with Gunicorn and Gevent worker (adjust if needed)
+# Add optional hardware diagnostics script
+RUN echo '#!/bin/bash\n' \
+         'echo "🛠️ Checking VAAPI support..."\n' \
+         'vainfo || echo "VAAPI not supported or unavailable."\n\n' \
+         'echo "🛠️ Checking FFmpeg hardware acceleration..."\n' \
+         'ffmpeg -hide_banner -hwaccels\n\n' \
+         'echo "🚀 Starting server..."\n' \
+         'exec "$@"' > /entrypoint.sh && \
+    chmod +x /entrypoint.sh
+
+# Run diagnostics then launch app
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["gunicorn", "-b", "0.0.0.0:3037", "--timeout", "300", "-k", "gevent", "app:app"]
