@@ -3,7 +3,6 @@ FROM ubuntu:22.04 AS ffmpeg-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build tools and dependencies
 RUN apt update && apt install -y \
   build-essential git pkg-config cmake meson ninja-build yasm nasm \
   libfdk-aac-dev libvpx-dev libx264-dev libx265-dev libnuma-dev \
@@ -48,13 +47,13 @@ RUN git clone https://github.com/ffmpeg/ffmpeg.git && \
     ldconfig
 
 # ---------- Stage 2: Runtime Container ----------
-FROM python:3.11-slim
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV LD_LIBRARY_PATH=/usr/local/lib
 
-# Install runtime dependencies only
 RUN apt update && apt install -y \
+  python3 python3-pip \
   libnuma1 libva-drm2 libx11-6 libxext6 libxv1 libasound2 libdrm2 \
   libxcb-shape0 libxcb-xfixes0 libsdl2-2.0-0 libpulse0 libvdpau1 \
   libfdk-aac2 libmp3lame0 libopus0 libass9 libfreetype6 libfontconfig1 \
@@ -80,5 +79,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Expose app port
 EXPOSE 3037
 
-# Start your application
 CMD ["./app.py"]
