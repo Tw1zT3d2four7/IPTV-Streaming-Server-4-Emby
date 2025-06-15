@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 
+# --- Early gevent monkey patching ---
+from gevent import monkey
+monkey.patch_all()
+
 import subprocess
 from flask import Flask, Response, stream_with_context, request
 import yaml
 import os
 import threading
+import queue
 
 # Load config
 with open("config.yml", "r") as f:
@@ -109,9 +114,6 @@ def playlist():
 
 # --- CONCURRENT STREAM SHARING SETUP START ---
 
-import queue
-import time
-
 class StreamProcess:
     def __init__(self, stream_url, cmd):
         self.stream_url = stream_url
@@ -131,28 +133,34 @@ class StreamProcess:
                 chunk = self.process.stdout.read(1024)
                 if not chunk:
                     break
-                # Put chunk into buffer, drop if buffer full
                 try:
                     self.buffer.put(chunk, timeout=1)
                 except queue.Full:
                     pass
         finally:
             self.running = False
-            self.process.kill()
+            try:
+                self.process.kill()
+            except Exception:
+                pass
 
     def get_stream_generator(self):
         q = queue.Queue()
 
         def client_reader():
-            while self.running:
-                try:
-                    chunk = self.buffer.get(timeout=5)
-                except queue.Empty:
-                    # Timeout, assume stream ended
-                    break
-                yield chunk
-            # Client disconnected
-            self.decrement_clients()
+            try:
+                while self.running:
+                    try:
+                        chunk = self.buffer.get(timeout=5)
+                    except queue.Empty:
+                        # Timeout, assume stream ended
+                        break
+                    yield chunk
+            except (GeneratorExit, ConnectionError):
+                # Client disconnected abruptly
+                pass
+            finally:
+                self.decrement_clients()
 
         def generator():
             for chunk in client_reader():
@@ -180,7 +188,6 @@ class StreamProcess:
         with self.lock:
             self.clients = 0
 
-# Global dictionary to hold active stream processes
 stream_processes = {}
 stream_processes_lock = threading.Lock()
 
@@ -193,12 +200,10 @@ def stream():
     with stream_processes_lock:
         sp = stream_processes.get(stream_url)
         if sp is None or not sp.running:
-            # Create new stream process
             cmd = build_ffmpeg_command(stream_url)
             sp = StreamProcess(stream_url, cmd)
             stream_processes[stream_url] = sp
 
-    # Return streaming response from shared process generator
     return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
 
 # --- CONCURRENT STREAM SHARING SETUP END ---
