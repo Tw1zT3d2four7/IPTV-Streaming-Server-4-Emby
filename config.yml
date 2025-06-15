@@ -4,6 +4,8 @@ local_m3u_path: "playlist_local.m3u"
 server:
   host: "0.0.0.0"
   port: 3037
+chunk_size: 1024
+queue_size: 100
 
 # Optional: override hardware detection by explicitly specifying the profile here
 # Leave empty to auto-detect hardware
