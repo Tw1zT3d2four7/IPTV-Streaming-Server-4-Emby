@@ -59,6 +59,12 @@ WORKDIR /app
 # Copy built ffmpeg binary
 COPY --from=ffmpeg-builder /ffmpeg-build/bin/ffmpeg /usr/local/bin/ffmpeg
 
+# Copy VMAF shared libraries so ffmpeg can find them at runtime
+COPY --from=ffmpeg-builder /usr/local/lib/libvmaf* /usr/local/lib/
+
+# Run ldconfig so shared libs are recognized
+RUN ldconfig /usr/local/lib
+
 # Copy your project files
 COPY . .
 
