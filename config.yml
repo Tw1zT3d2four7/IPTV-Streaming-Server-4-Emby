@@ -4,9 +4,6 @@ local_m3u_path: "playlist_local.m3u"
 server:
   host: "0.0.0.0"
   port: 3037
-chunk_size: 1024
-queue_size: 4196
-
 # Optional: override hardware detection by explicitly specifying the profile here
 # Leave empty to auto-detect hardware
 # Options: hevc_nvenc, h264_nvenc, hevc_amf, h264_amf, hevc_vaapi,
