@@ -1,7 +1,7 @@
-# Use NVIDIA base image with CUDA support
+# Use NVIDIA CUDA base image
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Install base build tools and dependencies + VAAPI + QSV libs
+# Install base tools and all dependencies including VAAPI libs and drivers
 RUN apt-get update && apt-get install -y \
     git build-essential pkg-config cmake \
     yasm nasm libtool autoconf automake \
@@ -9,31 +9,30 @@ RUN apt-get update && apt-get install -y \
     libfdk-aac-dev libmp3lame-dev libopus-dev \
     libssl-dev libass-dev python3-pip \
     wget curl unzip \
-    libmfx-dev \
-    intel-media-va-driver-non-free \
-    vainfo \
-    vainfo \
-    i965-va-driver-shaders \
-    vainfo \
+    libva-dev vainfo i965-va-driver libdrm-dev \
+    libmfx1 intel-media-va-driver-non-free \
+    vainfo mesa-va-drivers \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python packages (includes Gunicorn via requirements.txt)
+# Install Python dependencies (gunicorn included in requirements)
 COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# Set working directory
+# Set working directory for building nv-codec-headers
 WORKDIR /opt
 
-# Clone and build NVIDIA codec headers (needed for NVENC, CUVID, etc.)
+# Clone and install nv-codec-headers for NVIDIA hw accel
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
     cd .. && rm -rf nv-codec-headers
 
-# Clone and build FFmpeg
+# Clone FFmpeg source
 RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
 WORKDIR /opt/ffmpeg
+
+# Configure FFmpeg with all needed options including hardware acceleration
 RUN ./configure \
     --prefix=/usr/local \
     --enable-gpl \
@@ -56,11 +55,11 @@ RUN ./configure \
     make install && \
     ldconfig
 
-# Set application directory
+# Set workdir for your app
 WORKDIR /app
 
-# Copy application code
+# Copy app files (adjust as needed)
 COPY . .
 
-# Run with Gunicorn in production mode using gevent worker class
+# Expose port and run with Gunicorn and Gevent worker (adjust if needed)
 CMD ["gunicorn", "-b", "0.0.0.0:3037", "--timeout", "300", "-k", "gevent", "app:app"]
