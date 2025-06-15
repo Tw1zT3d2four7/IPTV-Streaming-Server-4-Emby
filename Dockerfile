@@ -12,6 +12,7 @@ COPY ffmpeg /usr/local/bin/ffmpeg
 
 # Make sure it's executable
 RUN chmod +x /usr/local/bin/ffmpeg
+
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
