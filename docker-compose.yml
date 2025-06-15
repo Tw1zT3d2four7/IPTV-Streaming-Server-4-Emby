@@ -10,12 +10,9 @@ services:
     volumes:
       - ./IPTV-Streaming-Server-4-Emby-main/config.yml:/app/config.yml:ro
       - ./IPTV-Streaming-Server-4-Emby-main/playlist_local.m3u:/app/playlist_local.m3u:ro
-      - /usr/local/bin/ffmpeg:/usr/local/bin/ffmpeg:ro
+      - /usr/local/bin/ffmpeg:/usr/local/bin/ffmpeg:ro  # Your custom FFmpeg
     restart: unless-stopped
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
+    gpus: all  # Enable NVIDIA GPU
+    # Optional: for Intel hardware acceleration too
+    devices:
+      - /dev/dri:/dev/dri
