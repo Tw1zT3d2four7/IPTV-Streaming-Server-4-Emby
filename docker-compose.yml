@@ -5,7 +5,7 @@ services:
     pull_policy: always
     restart: unless-stopped
     ports:
-      - "192.168.1.113037:3037"
+      - "192.168.1.11:3037:3037"
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility,video
