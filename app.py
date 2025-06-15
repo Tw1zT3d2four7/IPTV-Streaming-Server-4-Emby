@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
-# --- Early gevent monkey patching ---
+# --- EARLY GEVENT PATCH ---
 from gevent import monkey
 monkey.patch_all()
 
-import subprocess
+from gevent import subprocess
 from flask import Flask, Response, stream_with_context, request
 import yaml
 import os
 import threading
 import queue
-import signal
 
 # Load config
 with open("config.yml", "r") as f:
@@ -20,7 +19,10 @@ LOCAL_M3U_PATH = config.get("local_m3u_path", "playlist_local.m3u")
 SERVER_HOST = config.get("server", {}).get("host", "0.0.0.0")
 SERVER_PORT = config.get("server", {}).get("port", 3037)
 FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
+CHUNK_SIZE = config.get("chunk_size", 1024)
+QUEUE_SIZE = config.get("queue_size", 100)
 
+# FFmpeg profiles
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
@@ -92,9 +94,7 @@ def detect_hardware_encoder():
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
-    profile_name = FFMPEG_PROFILE_NAME.strip()
-    if not profile_name:
-        profile_name = detect_hardware_encoder()
+    profile_name = FFMPEG_PROFILE_NAME.strip() or detect_hardware_encoder()
     profile = FFMPEG_PROFILES.get(profile_name)
     if not profile:
         raise ValueError(f"Unknown ffmpeg profile: {profile_name}")
@@ -118,38 +118,45 @@ class StreamProcess:
         self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, bufsize=0)
         self.clients = 0
         self.lock = threading.Lock()
-        self.buffer = queue.Queue(maxsize=100)
+        self.buffer = queue.Queue(maxsize=QUEUE_SIZE)
         self.running = True
-        self.thread = threading.Thread(target=self._read_output, daemon=True)
+        self.thread = threading.Thread(target=self._read_output)
+        self.thread.daemon = True
         self.thread.start()
 
     def _read_output(self):
         try:
             while self.running:
-                chunk = self.process.stdout.read(1024)
+                chunk = self.process.stdout.read(CHUNK_SIZE)
                 if not chunk:
                     break
                 try:
                     self.buffer.put(chunk, timeout=1)
                 except queue.Full:
-                    continue
+                    pass
         finally:
-            self.shutdown()
+            self.running = False
+            try:
+                self.process.kill()
+            except Exception:
+                pass
 
     def get_stream_generator(self):
-        def generator():
+        def client_reader():
             try:
                 while self.running:
                     try:
                         chunk = self.buffer.get(timeout=5)
-                        yield chunk
                     except queue.Empty:
                         break
+                    yield chunk
+            except (GeneratorExit, ConnectionError):
+                pass
             finally:
                 self.decrement_clients()
 
         self.increment_clients()
-        return generator()
+        return client_reader()
 
     def increment_clients(self):
         with self.lock:
@@ -162,16 +169,13 @@ class StreamProcess:
                 self.shutdown()
 
     def shutdown(self):
-        if not self.running:
-            return
         self.running = False
+        try:
+            self.process.kill()
+        except Exception:
+            pass
         with self.lock:
             self.clients = 0
-        try:
-            self.process.send_signal(signal.SIGINT)
-            self.process.wait(timeout=5)
-        except Exception:
-            self.process.kill()
 
 stream_processes = {}
 stream_processes_lock = threading.Lock()
@@ -189,7 +193,10 @@ def stream():
             sp = StreamProcess(stream_url, cmd)
             stream_processes[stream_url] = sp
 
-    return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
+    return Response(
+        stream_with_context(sp.get_stream_generator()),
+        content_type='video/mp2t'
+    )
 
 if __name__ == "__main__":
-    app.run(host=SERVER_HOST, port=SERVER_PORT, threaded=True)
+    app.run(host=SERVER_HOST, port=SERVER_PORT)
