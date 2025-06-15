@@ -9,123 +9,85 @@ streaming:
   format: mpegts
   queue_size: 100
   timeout: 5000000
+  default_profile: h264_nvenc
   reconnect: true
 
 profiles:
-
   h264_nvenc:
-    name: NVIDIA H.264
+    name: NVIDIA H.264 (NVENC)
     codec: h264_nvenc
     ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -hwaccel cuda -hwaccel_output_format cuda -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v h264_nvenc -preset fast -tune ull -profile:v main -level 4.1
-      -rgb_mode 1 -g 25 -bf 1 -rc vbr_hq -cq 23 -rc-lookahead 20 -lookahead_level auto
-      -no-scenecut 1 -temporal-aq 1 -spatial-aq 1 -aq-strength 6 -b:v 10000k -maxrate 13000k -bufsize 26000k
+      ffmpeg -hide_banner -loglevel error -fflags +genpts+discardcorrupt+igndts
+      -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60 -rw_timeout 5000000
+      -timeout 5000000 -probesize 1000000 -analyzeduration 1000000
+      -hwaccel cuda -hwaccel_output_format cuda -threads 0 -thread_queue_size 8192
+      -re -i {streamUrl}
+      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v h264_nvenc -preset fast -tune ull
+      -profile:v high -level:v 4.1 -g 50 -bf 2 -rc vbr_hq -cq 23 -rc-lookahead 20
+      -b:v 6000k -maxrate 7500k -bufsize 12000k
+      -no-scenecut 1 -spatial-aq 1 -temporal-aq 1 -aq-strength 10
       -c:a aac -b:a 128k -ac 2 -af aresample=async=0 -vsync 1
       -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
       -bsf:v h264_mp4toannexb pipe:1
 
   hevc_nvenc:
-    name: NVIDIA HEVC
+    name: NVIDIA HEVC (NVENC)
     codec: hevc_nvenc
     ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -hwaccel cuda -hwaccel_output_format cuda -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v hevc_nvenc -preset fast -tune ull -profile:v main -level 4.1
-      -rgb_mode 1 -g 25 -bf 1 -rc vbr_hq -cq 26 -rc-lookahead 10 -lookahead_level auto
-      -no-scenecut 1 -temporal-aq 1 -spatial-aq 1 -aq-strength 4 -b:v 6000k -maxrate 7500k -bufsize 12000k
+      ffmpeg -hide_banner -loglevel error -fflags +genpts+discardcorrupt+igndts
+      -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60 -rw_timeout 5000000
+      -timeout 5000000 -probesize 1000000 -analyzeduration 1000000
+      -hwaccel cuda -hwaccel_output_format cuda -threads 0 -thread_queue_size 8192
+      -re -i {streamUrl}
+      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v hevc_nvenc -preset p1 -tune ull
+      -profile:v main -level:v 5.1 -g 50 -bf 2 -rc vbr -cq 25 -rc-lookahead 20
+      -b:v 6000k -maxrate 7500k -bufsize 12000k
+      -no-scenecut 1 -spatial-aq 1 -temporal-aq 1 -aq-strength 10
       -c:a aac -b:a 128k -ac 2 -af aresample=async=0 -vsync 1
       -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
       -bsf:v hevc_mp4toannexb pipe:1
 
-  h264_vaapi:
-    name: Intel/AMD VAAPI H.264
-    codec: h264_vaapi
-    ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -init_hw_device vaapi=foo:/dev/dri/renderD128
-      -hwaccel vaapi -hwaccel_output_format vaapi -hwaccel_device foo
-      -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v h264_vaapi -profile:v main -level 4.1 -g 25 -qp 23
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1
-      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity pipe:1
-
-  hevc_vaapi:
-    name: Intel/AMD VAAPI HEVC
-    codec: hevc_vaapi
-    ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -init_hw_device vaapi=foo:/dev/dri/renderD128
-      -hwaccel vaapi -hwaccel_output_format vaapi -hwaccel_device foo
-      -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v hevc_vaapi -profile:v main -level 4.1 -g 25 -qp 26
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1
-      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
-      -bsf:v hevc_mp4toannexb pipe:1
-
-  h264_qsv:
-    name: Intel QSV H.264
-    codec: h264_qsv
-    ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -init_hw_device qsv=hw -hwaccel qsv -hwaccel_output_format qsv -load_plugin h264_hw
-      -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v h264_qsv -preset medium -profile:v main -level 4.1 -g 25 -global_quality 23
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1 -f mpegts -muxrate 0 -muxdelay 0.05
-      -mpegts_flags +initial_discontinuity pipe:1
-
-  hevc_qsv:
-    name: Intel QSV HEVC
-    codec: hevc_qsv
-    ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -init_hw_device qsv=hw -hwaccel qsv -hwaccel_output_format qsv -load_plugin hevc_hw
-      -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v hevc_qsv -preset medium -profile:v main -level 4.1 -g 25 -global_quality 26
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1 -f mpegts -muxrate 0 -muxdelay 0.05
-      -mpegts_flags +initial_discontinuity -bsf:v hevc_mp4toannexb pipe:1
-
   libx264:
-    name: Software x264
+    name: Software H.264
     codec: libx264
     ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v libx264 -preset fast -tune zerolatency -profile:v main -level 4.1 -g 25
-      -bf 1 -crf 23 -rc-lookahead 20 -no-scenecut 1 -aq-mode 3
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1
-      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity pipe:1
+      ffmpeg -hide_banner -loglevel error -fflags +genpts+discardcorrupt+igndts
+      -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60 -rw_timeout 5000000
+      -timeout 5000000 -probesize 1000000 -analyzeduration 1000000
+      -threads 2 -thread_queue_size 8192
+      -re -i {streamUrl}
+      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v libx264 -preset veryfast -tune zerolatency
+      -g 50 -bf 2 -b:v 6000k -maxrate 7500k -bufsize 12000k
+      -c:a aac -b:a 128k -ac 2 -af aresample=async=0 -vsync 1
+      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
+      -bsf:v h264_mp4toannexb pipe:1
 
-  libx265:
-    name: Software x265
-    codec: libx265
+  h264_qsv:
+    name: Intel Quick Sync (H.264 QSV)
+    codec: h264_qsv
     ffmpeg_args: >
-      ffmpeg -hide_banner -loglevel error -probesize 500000 -analyzeduration 1000000 -fflags +genpts+discardcorrupt
-      -flags low_delay -avoid_negative_ts make_zero -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60
-      -timeout 5000000 -rw_timeout 5000000 -copyts -start_at_zero
-      -threads 0 -thread_queue_size 8192 -re -i {streamUrl}
-      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v libx265 -preset fast -tune zerolatency -profile:v main -level 4.1
-      -g 25 -x265-params bframes=1:crf=26:rc-lookahead=20:no-scenecut=1:aq-mode=3
-      -b:v 9000k -maxrate 12000k -bufsize 24000k -c:a aac -b:a 128k -ac 2
-      -af aresample=async=0 -vsync 1
-      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity -bsf:v hevc_mp4toannexb pipe:1
+      ffmpeg -hide_banner -loglevel error -fflags +genpts+discardcorrupt+igndts
+      -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60 -rw_timeout 5000000
+      -timeout 5000000 -probesize 1000000 -analyzeduration 1000000
+      -hwaccel qsv -threads 0 -thread_queue_size 8192
+      -re -i {streamUrl}
+      -map 0:v:0 -map 0:a:0? -map 0:s? -c:v h264_qsv -preset veryfast -g 50
+      -b:v 6000k -maxrate 7500k -bufsize 12000k
+      -c:a aac -b:a 128k -ac 2 -af aresample=async=0 -vsync 1
+      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
+      -bsf:v h264_mp4toannexb pipe:1
+
+  h264_vaapi:
+    name: VAAPI H.264
+    codec: h264_vaapi
+    ffmpeg_args: >
+      ffmpeg -hide_banner -loglevel error -fflags +genpts+discardcorrupt+igndts
+      -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60 -rw_timeout 5000000
+      -timeout 5000000 -probesize 1000000 -analyzeduration 1000000
+      -hwaccel vaapi -vaapi_device /dev/dri/renderD128 -threads 0 -thread_queue_size 8192
+      -re -i {streamUrl}
+      -map 0:v:0 -map 0:a:0? -map 0:s? -vf 'format=nv12,hwupload' -c:v h264_vaapi
+      -qp 23 -g 50 -b:v 6000k -maxrate 7500k -bufsize 12000k
+      -c:a aac -b:a 128k -ac 2 -af aresample=async=0 -vsync 1
+      -f mpegts -muxrate 0 -muxdelay 0.05 -mpegts_flags +initial_discontinuity
+      -bsf:v h264_mp4toannexb pipe:1
