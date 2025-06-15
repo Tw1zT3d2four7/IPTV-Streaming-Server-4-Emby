@@ -12,22 +12,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Set Python 3 as default
-RUN ln -s /usr/bin/python3 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
+# Set Python 3 and pip3 as default only if not already linked
+RUN test -e /usr/bin/python || ln -s /usr/bin/python3 /usr/bin/python && \
+    test -e /usr/bin/pip || ln -s /usr/bin/pip3 /usr/bin/pip
 
-# Install Python dependencies
+# Upgrade pip and install Python dependencies
 RUN pip install --upgrade pip && \
     pip install Flask==2.3.2 PyYAML==6.0 gunicorn
 
 # Set working directory
 WORKDIR /opt
 
-# Clone FFmpeg and required headers for NVIDIA encoding
+# Clone and build NVIDIA codec headers (needed for NVENC)
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
     cd .. && rm -rf nv-codec-headers
 
+# Clone and build FFmpeg with CUDA and other libs enabled
 RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg && \
     cd ffmpeg && \
     ./configure \
