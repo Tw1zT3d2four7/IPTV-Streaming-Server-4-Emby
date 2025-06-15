@@ -47,16 +47,16 @@ RUN git clone https://github.com/ffmpeg/ffmpeg.git && \
     make -j$(nproc) && make install && ldconfig
 
 # ---------- Stage 2: Final Runtime Image ----------
-FROM python:3.11-slim
+FROM python:3.11
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install runtime-only dependencies
+# Install runtime-only dependencies (fixed package list, removed problematic ones)
 RUN apt update && apt install -y \
   libnuma1 libva-drm2 libx11-6 libxext6 libxv1 libasound2 libdrm2 \
-  libxcb-shape0 libxcb-xfixes0 libxcb-shm0 libsdl2-2.0-0 libpulse0 libvdpau1 \
-  libfdk-aac2 libmp3lame0 libopus0 libass9 libfreetype6 libfontconfig1 \
-  libfribidi0 libopenjp2-7 libssl3 libunistring2 zlib1g \
+  libxcb-shape0 libxcb-xfixes0 libxcb-shm0 libsdl2-dev libpulse0 libvdpau1 \
+  libmp3lame0 libopus0 libass9 libfreetype6 libfontconfig1 \
+  libfribidi0 libopenjp2-7 libssl-dev libunistring2 zlib1g \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -70,7 +70,7 @@ COPY . .
 # Ensure permissions
 RUN chmod +x /usr/local/bin/ffmpeg && chmod +x app.py
 
-# Install Python deps
+# Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 EXPOSE 3037
