@@ -3,7 +3,7 @@ FROM ubuntu:22.04 AS ffmpeg-builder
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install build tools and development libraries
+# Install build tools and dev libs
 RUN apt update && apt install -y \
   build-essential git pkg-config cmake meson ninja-build yasm nasm \
   libfdk-aac-dev libvpx-dev libx264-dev libx265-dev libnuma-dev \
@@ -48,21 +48,21 @@ FROM python:3.11-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Install only runtime dependencies
+# Install only runtime dependencies (including missing xcb libs)
 RUN apt update && apt install -y \
     libnuma1 libva-drm2 libx11-6 libxext6 libxv1 libasound2 libdrm2 \
+    libxcb-shape0 libxcb-xfixes0 \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
 WORKDIR /app
 
-# Copy built ffmpeg
+# Copy built ffmpeg binary
 COPY --from=ffmpeg-builder /ffmpeg-build/bin/ffmpeg /usr/local/bin/ffmpeg
 
 # Copy your project files
 COPY . .
 
-# Ensure ffmpeg and app.py are executable
+# Ensure executables have correct permissions
 RUN chmod +x /usr/local/bin/ffmpeg && chmod +x app.py
 
 # Install Python dependencies
@@ -71,5 +71,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Expose your app's port
 EXPOSE 3037
 
-# Start your app
+# Run your app
 CMD ["./app.py"]
