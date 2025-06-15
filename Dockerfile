@@ -1,8 +1,9 @@
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+WORKDIR /opt
 
-# System dependencies
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     autoconf automake build-essential cmake git-core \
     libass-dev libfreetype6-dev libsdl2-dev libtool \
@@ -13,48 +14,44 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libfdk-aac-dev libmp3lame-dev libopus-dev \
     libssl-dev libass-dev \
     yasm nasm \
-    python3 python3-pip python3-yaml \
-    nvidia-cuda-toolkit \
+    python3 python3-pip \
  && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Optional: Don't overwrite custom ffmpeg build
-ARG SKIP_FFMPEG_BUILD=false
+# Get NVENC SDK headers
+RUN git clone https://git.videolan.org/git/ffmpeg/nv-codec-headers.git && \
+    cd nv-codec-headers && \
+    make -j$(nproc) && make install && \
+    ldconfig
 
-WORKDIR /opt
+# Clone FFmpeg source
+RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
-# Clone FFmpeg source only if build is needed
-RUN if [ "$SKIP_FFMPEG_BUILD" = "false" ]; then \
-      git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg; \
-    fi
+# Build FFmpeg with CUDA/NVENC + OpenSSL
+WORKDIR /opt/ffmpeg
+RUN ./configure \
+    --prefix=/usr/local \
+    --enable-gpl \
+    --enable-nonfree \
+    --enable-cuda \
+    --enable-cuvid \
+    --enable-nvenc \
+    --enable-libx264 \
+    --enable-libx265 \
+    --enable-libfdk-aac \
+    --enable-libmp3lame \
+    --enable-libopus \
+    --enable-openssl \
+    --enable-protocol=https \
+    --enable-libass \
+    --enable-shared && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
 
-# Build FFmpeg with NVIDIA + SSL if needed
-RUN if [ "$SKIP_FFMPEG_BUILD" = "false" ]; then \
-      cd /opt/ffmpeg && \
-      ./configure \
-        --prefix=/usr/local \
-        --enable-gpl \
-        --enable-nonfree \
-        --enable-cuda \
-        --enable-cuvid \
-        --enable-nvenc \
-        --enable-libx264 \
-        --enable-libx265 \
-        --enable-libfdk-aac \
-        --enable-libmp3lame \
-        --enable-libopus \
-        --enable-openssl \
-        --enable-protocol=https \
-        --enable-libass \
-        --enable-shared && \
-      make -j$(nproc) && \
-      make install && \
-      ldconfig; \
-    fi
-
-# App layer (optional if using with your Flask app)
+# App layer (optional)
 WORKDIR /app
 COPY . /app
-RUN pip3 install --no-cache-dir flask pyyaml
-
+RUN pip3 install flask
 EXPOSE 3037
+
 CMD ["python3", "app.py"]
