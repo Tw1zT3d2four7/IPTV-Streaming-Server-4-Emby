@@ -2,7 +2,6 @@ services:
   iptv-streaming-server:
     image: ghcr.io/tw1zt3d2four7/iptv-streaming-server-4-emby:dev
     container_name: iptv-streaming-server
-    pull_policy: always
     restart: unless-stopped
     ports:
       - "192.168.1.11:3037:3037"
@@ -18,7 +17,7 @@ services:
       - ./playlist_local.m3u:/app/playlist_local.m3u:ro
     runtime: nvidia
     devices:
-      - /dev/dri:/dev/dri
+      - "/dev/dri:/dev/dri"
     deploy:
       resources:
         reservations:
