@@ -1,46 +1,34 @@
-# Use an NVIDIA CUDA base image
+# Use NVIDIA base image with CUDA support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Avoid interactive prompts
-ENV DEBIAN_FRONTEND=noninteractive
-
-# Install OS packages
+# Install base build tools and dependencies
 RUN apt-get update && apt-get install -y \
-    build-essential \
-    git \
-    curl \
-    wget \
-    ca-certificates \
-    yasm \
-    nasm \
-    libx264-dev \
-    libx265-dev \
-    libfdk-aac-dev \
-    libmp3lame-dev \
-    libopus-dev \
-    libass-dev \
-    libssl-dev \
-    pkg-config \
-    python3 \
-    python3-pip \
-    python3-setuptools \
-    && rm -rf /var/lib/apt/lists/*
+    git build-essential pkg-config cmake \
+    yasm nasm libtool autoconf automake \
+    libx264-dev libx265-dev libnuma-dev \
+    libfdk-aac-dev libmp3lame-dev libopus-dev \
+    libssl-dev libass-dev python3-pip \
+    wget curl unzip && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-COPY requirements.txt /app/requirements.txt
-RUN pip3 install --no-cache-dir -r /app/requirements.txt
+# Install Python packages
+COPY requirements.txt /tmp/
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# Optional: Build FFmpeg with NVIDIA support
+# Set working directory
 WORKDIR /opt
-RUN git clone https://git.ffmpeg.org/ffmpeg.git ffmpeg
+
+# Clone nv-codec-headers (required for --enable-cuda, cuvid, nvenc)
+RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
+    cd nv-codec-headers && \
+    make && make install && \
+    cd .. && rm -rf nv-codec-headers
+
+# Clone FFmpeg
+RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
+
+# Build FFmpeg with required options
 WORKDIR /opt/ffmpeg
-
-# Clone and install ffnvcodec headers (needed for --enable-cuda)
-RUN git clone https://git.videolan.org/git/ffnvcodec.git && \
-    cd ffnvcodec && \
-    make install && \
-    cd ..
-
 RUN ./configure \
     --prefix=/usr/local \
     --enable-gpl \
@@ -53,17 +41,19 @@ RUN ./configure \
     --enable-libfdk-aac \
     --enable-libmp3lame \
     --enable-libopus \
-    --enable-libass \
     --enable-openssl \
+    --enable-libass \
     --enable-protocol=https \
-    --enable-shared \
-    && make -j$(nproc) \
-    && make install \
-    && ldconfig
+    --enable-shared && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
 
-# Copy your app
+# Set workdir for your app
 WORKDIR /app
-COPY . /app
 
-# Run your Flask app
+# Copy your app files (adjust this to your setup)
+COPY . .
+
+# Set entrypoint (adjust if needed)
 CMD ["python3", "app.py"]
