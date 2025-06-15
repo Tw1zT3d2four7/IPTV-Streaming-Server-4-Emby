@@ -1,59 +1,65 @@
-# Use NVIDIA base image with CUDA support
-FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
+# Base: NVIDIA CUDA runtime on Ubuntu 22.04
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
-# Install base build tools and dependencies
-RUN apt-get update && apt-get install -y \
-    git build-essential pkg-config cmake \
-    yasm nasm libtool autoconf automake \
-    libx264-dev libx265-dev libnuma-dev \
-    libfdk-aac-dev libmp3lame-dev libopus-dev \
-    libssl-dev libass-dev python3-pip \
-    wget curl unzip && \
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 python3-pip git make build-essential pkg-config yasm \
+    libx264-dev libx265-dev libnuma-dev libfdk-aac-dev \
+    libmp3lame-dev libopus-dev libass-dev libssl-dev \
+    curl ca-certificates && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
-COPY requirements.txt /tmp/
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+# Set Python 3 as default
+RUN ln -s /usr/bin/python3 /usr/bin/python && ln -s /usr/bin/pip3 /usr/bin/pip
+
+# Install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install Flask==2.3.2 PyYAML==6.0 gunicorn
 
 # Set working directory
 WORKDIR /opt
 
-# Clone nv-codec-headers (required for --enable-cuda, cuvid, nvenc)
+# Clone FFmpeg and required headers for NVIDIA encoding
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
     cd .. && rm -rf nv-codec-headers
 
-# Clone FFmpeg
-RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
-
-# Build FFmpeg with required options
-WORKDIR /opt/ffmpeg
-RUN ./configure \
-    --prefix=/usr/local \
-    --enable-gpl \
-    --enable-nonfree \
-    --enable-cuda \
-    --enable-cuvid \
-    --enable-nvenc \
-    --enable-libx264 \
-    --enable-libx265 \
-    --enable-libfdk-aac \
-    --enable-libmp3lame \
-    --enable-libopus \
-    --enable-openssl \
-    --enable-libass \
-    --enable-protocol=https \
-    --enable-shared && \
+RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg && \
+    cd ffmpeg && \
+    ./configure \
+        --prefix=/usr/local \
+        --enable-gpl \
+        --enable-nonfree \
+        --enable-cuda \
+        --enable-cuvid \
+        --enable-nvenc \
+        --enable-libx264 \
+        --enable-libx265 \
+        --enable-libfdk-aac \
+        --enable-libmp3lame \
+        --enable-libopus \
+        --enable-libass \
+        --enable-openssl \
+        --enable-shared \
+        --enable-pic \
+        --enable-protocol=https && \
     make -j$(nproc) && \
     make install && \
-    ldconfig
+    ldconfig && \
+    cd .. && rm -rf ffmpeg
 
-# Set workdir for your app
+# Move to app directory
 WORKDIR /app
 
-# Copy your app files (adjust this to your setup)
+# Copy application code
 COPY . .
 
-# Set entrypoint (adjust if needed)
-CMD ["python3", "app.py"]
+# Expose the Flask/Gunicorn port
+EXPOSE 3037
+
+# Run Gunicorn WSGI server
+CMD ["gunicorn", "-b", "0.0.0.0:3037", "app:app"]
