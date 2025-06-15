@@ -1,3 +1,4 @@
+
 # Use NVIDIA base image with CUDA support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
@@ -14,6 +15,8 @@ RUN apt-get update && apt-get install -y \
 # Install Python packages (now including gunicorn)
 COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+
+RUN pip3 install gunicorn
 
 # Set working directory
 WORKDIR /opt
