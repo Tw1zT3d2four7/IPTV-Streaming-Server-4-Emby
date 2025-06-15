@@ -4,6 +4,7 @@ import subprocess
 from flask import Flask, Response, stream_with_context, request
 import yaml
 import os
+import threading
 
 # Load config
 with open("config.yml", "r") as f:
@@ -50,7 +51,6 @@ FFMPEG_PROFILES = {
         "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.05", "-mpegts_flags", "+initial_discontinuity",
         "-bsf:v", "h264_mp4toannexb", "pipe:1"
     ],
-    # Add other profiles here as needed (amf, vaapi, qsv, software_libx264, software_libx265) ...
     "software_libx264": [
         'ffmpeg', "-hide_banner", "-loglevel", "info",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4294",
@@ -81,17 +81,10 @@ FFMPEG_PROFILES = {
 
 def detect_hardware_encoder():
     """Detects hardware encoder available on the host machine."""
-    # Check for NVIDIA GPU (nvenc)
     if os.path.exists("/dev/nvidia0"):
         return "hevc_nvenc"  # Or "h264_nvenc" if preferred
-    # Check for AMD GPU (amf)
-    # For AMD, detection is less straightforward, assume present if AMF libs present or add env override
-    # For demo purposes, skip automatic AMD detection here
-    # Check for Intel Quick Sync (qsv)
     if os.path.exists("/dev/dri/renderD128"):
-        # For now assume QSV available if this device exists
         return "h264_qsv"
-    # Default to software
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
@@ -114,27 +107,101 @@ def playlist():
     except FileNotFoundError:
         return "M3U file not found", 404
 
+# --- CONCURRENT STREAM SHARING SETUP START ---
+
+import queue
+import time
+
+class StreamProcess:
+    def __init__(self, stream_url, cmd):
+        self.stream_url = stream_url
+        self.cmd = cmd
+        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        self.clients = 0
+        self.lock = threading.Lock()
+        self.buffer = queue.Queue(maxsize=100)  # Buffer chunks for clients
+        self.running = True
+        self.thread = threading.Thread(target=self._read_output)
+        self.thread.daemon = True
+        self.thread.start()
+
+    def _read_output(self):
+        try:
+            while self.running:
+                chunk = self.process.stdout.read(1024)
+                if not chunk:
+                    break
+                # Put chunk into buffer, drop if buffer full
+                try:
+                    self.buffer.put(chunk, timeout=1)
+                except queue.Full:
+                    pass
+        finally:
+            self.running = False
+            self.process.kill()
+
+    def get_stream_generator(self):
+        q = queue.Queue()
+
+        def client_reader():
+            while self.running:
+                try:
+                    chunk = self.buffer.get(timeout=5)
+                except queue.Empty:
+                    # Timeout, assume stream ended
+                    break
+                yield chunk
+            # Client disconnected
+            self.decrement_clients()
+
+        def generator():
+            for chunk in client_reader():
+                yield chunk
+
+        self.increment_clients()
+        return generator()
+
+    def increment_clients(self):
+        with self.lock:
+            self.clients += 1
+
+    def decrement_clients(self):
+        with self.lock:
+            self.clients -= 1
+            if self.clients <= 0:
+                self.shutdown()
+
+    def shutdown(self):
+        self.running = False
+        try:
+            self.process.kill()
+        except Exception:
+            pass
+        with self.lock:
+            self.clients = 0
+
+# Global dictionary to hold active stream processes
+stream_processes = {}
+stream_processes_lock = threading.Lock()
+
 @app.route("/stream")
 def stream():
     stream_url = request.args.get("url")
     if not stream_url:
         return "Missing 'url' query parameter", 400
 
-    cmd = build_ffmpeg_command(stream_url)
+    with stream_processes_lock:
+        sp = stream_processes.get(stream_url)
+        if sp is None or not sp.running:
+            # Create new stream process
+            cmd = build_ffmpeg_command(stream_url)
+            sp = StreamProcess(stream_url, cmd)
+            stream_processes[stream_url] = sp
 
-    def generate():
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        try:
-            while True:
-                chunk = process.stdout.read(1024)
-                if not chunk:
-                    break
-                yield chunk
-        finally:
-            process.kill()
+    # Return streaming response from shared process generator
+    return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
 
-    return Response(stream_with_context(generate()), content_type='video/mp2t')
+# --- CONCURRENT STREAM SHARING SETUP END ---
 
 if __name__ == "__main__":
     app.run(host=SERVER_HOST, port=SERVER_PORT)
-
