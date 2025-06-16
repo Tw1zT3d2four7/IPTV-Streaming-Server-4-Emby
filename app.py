@@ -4,8 +4,19 @@ from flask import Flask, request, Response, stream_with_context
 import subprocess
 import yaml
 import os
+import threading
+import time
+import logging
+from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
+
+# Configure logger
+log_handler = RotatingFileHandler("ffmpeg_errors.log", maxBytes=5*1024*1024, backupCount=3)
+log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger = logging.getLogger("ffmpeg_logger")
+logger.setLevel(logging.INFO)
+logger.addHandler(log_handler)
 
 # Load config
 with open("config.yml", "r") as f:
@@ -82,7 +93,7 @@ FFMPEG_PROFILES = {
 
 def detect_hardware_encoder():
     if os.path.exists("/dev/nvidia0"):
-        return "hevc_nvenc"  # Prefer HEVC on NVIDIA
+        return "hevc_nvenc"
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
@@ -113,21 +124,39 @@ def stream():
     try:
         ffmpeg_command = build_ffmpeg_command(stream_url)
     except Exception as e:
+        logger.error(f"Failed to build FFmpeg command: {e}")
         return f"Failed to build FFmpeg command: {e}", 500
 
     def generate():
         process = subprocess.Popen(
             ffmpeg_command,
             stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
             bufsize=0
         )
+
+        def log_stderr(proc):
+            for line in iter(proc.stderr.readline, b''):
+                decoded = line.decode(errors="ignore").strip()
+                if decoded:
+                    logger.error(decoded)
+        threading.Thread(target=log_stderr, args=(process,), daemon=True).start()
+
+        last_data_time = time.time()
+        timeout_seconds = 10
+
         try:
             while True:
-                output = process.stdout.read(1024)
-                if not output:
+                if process.poll() is not None:
                     break
-                yield output
+
+                output = process.stdout.read(1024)
+                if output:
+                    last_data_time = time.time()
+                    yield output
+                elif time.time() - last_data_time > timeout_seconds:
+                    logger.warning("Timeout: no data from FFmpeg for 10 seconds")
+                    break
         except GeneratorExit:
             pass
         finally:
