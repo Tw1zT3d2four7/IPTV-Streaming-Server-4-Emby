@@ -1,20 +1,15 @@
 #!/usr/bin/env python3
 
-from gevent import monkey
-monkey.patch_all()
+from gevent import monkey; monkey.patch_all()
 
-import subprocess
-from flask import Flask, Response, stream_with_context, request
-import yaml
 import os
+import subprocess
 import threading
 import queue
-import logging
+import yaml
+from flask import Flask, Response, stream_with_context, request
 
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s - %(message)s')
-
-# Load config
+# Load configuration
 with open("config.yml", "r") as f:
     config = yaml.safe_load(f)
 
@@ -91,7 +86,7 @@ def detect_hardware_encoder():
     if os.path.exists("/dev/nvidia0"):
         return "hevc_nvenc"
     if os.path.exists("/dev/dri/renderD128"):
-        return "h264_qsv"
+        return "h264_nvenc"
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
@@ -107,77 +102,83 @@ app = Flask(__name__)
 def playlist():
     try:
         with open(LOCAL_M3U_PATH, "r", encoding="utf-8") as f:
-            data = f.read()
-        return Response(data, content_type="application/x-mpegURL")
+            return Response(f.read(), content_type="application/x-mpegURL")
     except FileNotFoundError:
         return "M3U file not found", 404
+
+@app.route("/health")
+def health():
+    return "OK", 200
 
 class StreamProcess:
     def __init__(self, stream_url, cmd):
         self.stream_url = stream_url
         self.cmd = cmd
-        self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.clients = 0
         self.lock = threading.Lock()
-        self.buffer = queue.Queue(maxsize=200)
+        self.buffer = queue.Queue(maxsize=100)
         self.running = True
-        self.thread = threading.Thread(target=self._read_output)
-        self.thread.daemon = True
-        self.thread.start()
+        self.process = None
+        self.thread = None
+        self.start()
+
+    def start(self):
+        try:
+            self.process = subprocess.Popen(self.cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+            self.thread = threading.Thread(target=self._read_output)
+            self.thread.daemon = True
+            self.thread.start()
+        except Exception as e:
+            print(f"Failed to start FFmpeg for {self.stream_url}: {e}")
+            self.running = False
 
     def _read_output(self):
         try:
-            while self.running:
-                if self.process.poll() is not None:
-                    logging.warning(f"ffmpeg exited for {self.stream_url}")
-                    break
-                chunk = self.process.stdout.read(65536)
+            while self.running and self.process and self.process.poll() is None:
+                chunk = self.process.stdout.read(8192)
                 if not chunk:
                     break
                 try:
                     self.buffer.put(chunk, timeout=1)
                 except queue.Full:
-                    logging.debug(f"Buffer full for {self.stream_url}")
+                    continue
         finally:
             self.running = False
-            try:
-                self.process.kill()
-            except Exception:
-                pass
+            self.shutdown()
 
     def get_stream_generator(self):
+        self.increment_clients()
         def generator():
             try:
                 while self.running:
                     try:
                         chunk = self.buffer.get(timeout=5)
+                        yield chunk
                     except queue.Empty:
                         break
-                    yield chunk
             finally:
                 self.decrement_clients()
-        self.increment_clients()
         return generator()
 
     def increment_clients(self):
         with self.lock:
             self.clients += 1
-            logging.info(f"{self.stream_url} clients: {self.clients}")
 
     def decrement_clients(self):
         with self.lock:
             self.clients -= 1
-            logging.info(f"{self.stream_url} clients: {self.clients}")
             if self.clients <= 0:
                 self.shutdown()
 
     def shutdown(self):
         self.running = False
         try:
-            self.process.kill()
+            if self.process:
+                self.process.kill()
         except Exception:
             pass
-        self.clients = 0
+        with self.lock:
+            self.clients = 0
 
 stream_processes = {}
 stream_processes_lock = threading.Lock()
@@ -191,12 +192,25 @@ def stream():
     with stream_processes_lock:
         sp = stream_processes.get(stream_url)
         if sp is None or not sp.running:
-            logging.info(f"Spawning new stream for {stream_url}")
-            cmd = build_ffmpeg_command(stream_url)
-            sp = StreamProcess(stream_url, cmd)
-            stream_processes[stream_url] = sp
+            try:
+                cmd = build_ffmpeg_command(stream_url)
+                sp = StreamProcess(stream_url, cmd)
+                stream_processes[stream_url] = sp
+            except Exception as e:
+                return f"Failed to start stream: {e}", 500
 
     return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
+
+def cleanup_dead_processes():
+    import time
+    while True:
+        with stream_processes_lock:
+            to_delete = [url for url, sp in stream_processes.items() if not sp.running]
+            for url in to_delete:
+                del stream_processes[url]
+        time.sleep(30)
+
+threading.Thread(target=cleanup_dead_processes, daemon=True).start()
 
 if __name__ == "__main__":
     app.run(host=SERVER_HOST, port=SERVER_PORT)
