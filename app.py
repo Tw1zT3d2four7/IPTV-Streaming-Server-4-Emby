@@ -3,12 +3,16 @@
 from gevent import monkey
 monkey.patch_all()
 
-import os
 import subprocess
-import threading
-import queue
 from flask import Flask, Response, stream_with_context, request
 import yaml
+import os
+import threading
+import queue
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(levelname)s - %(message)s')
 
 # Load config
 with open("config.yml", "r") as f:
@@ -17,52 +21,42 @@ with open("config.yml", "r") as f:
 LOCAL_M3U_PATH = config.get("local_m3u_path", "playlist_local.m3u")
 SERVER_HOST = config.get("server", {}).get("host", "0.0.0.0")
 SERVER_PORT = config.get("server", {}).get("port", 3037)
-FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "").strip()
+FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 
-# Define your FFmpeg profiles here or load from config as you prefer
+# All available FFmpeg profiles
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
-        'ffmpeg', "-hide_banner", "-loglevel", "error",
-        "-probesize", "500000", "-analyzeduration", "1000000",
+        'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
-        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60",
-        "-timeout", "5000000", "-rw_timeout", "5000000",
-        "-copyts", "-start_at_zero",
+        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
+        "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
         "-threads", "0", "-thread_queue_size", "8192",
         "-i", "{streamUrl}",
         "-map", "0:v:0", "-map", "0:a:0?", "-map", "0:s?",
-        "-c:v", "hevc_nvenc", "-preset", "fast", "-tune", "ull",
-        "-profile:v", "main", "-level", "4.1", "-rgb_mode", "1",
-        "-g", "25", "-bf", "1", "-rc", "vbr_hq", "-cq", "26", "-rc-lookahead", "10",
+        "-c:v", "hevc_nvenc", "-preset", "fast", "-tune", "ull", "-profile:v", "main", "-level", "4.1",
+        "-rgb_mode", "1", "-g", "25", "-bf", "1", "-rc", "vbr_hq", "-cq", "26", "-rc-lookahead", "10",
         "-lookahead_level", "auto", "-no-scenecut", "1", "-temporal-aq", "1", "-spatial-aq", "1", "-aq-strength", "4",
         "-b:v", "6000k", "-maxrate", "7500k", "-bufsize", "12000k",
-        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0",
-        "-vsync", "1",
-        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.05",
-        "-mpegts_flags", "+initial_discontinuity",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "1",
+        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.05", "-mpegts_flags", "+initial_discontinuity",
         "-bsf:v", "hevc_mp4toannexb", "pipe:1"
     ],
     "h264_nvenc": [
-        'ffmpeg', "-hide_banner", "-loglevel", "error",
-        "-probesize", "500000", "-analyzeduration", "1000000",
+        'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
-        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60",
-        "-timeout", "5000000", "-rw_timeout", "5000000",
-        "-copyts", "-start_at_zero",
+        "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
+        "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
         "-threads", "0", "-thread_queue_size", "8192",
         "-i", "{streamUrl}",
         "-map", "0:v:0", "-map", "0:a:0?", "-map", "0:s?",
-        "-c:v", "h264_nvenc", "-preset", "fast", "-tune", "ull",
-        "-profile:v", "main", "-level", "4.1", "-rgb_mode", "1",
-        "-g", "25", "-bf", "1", "-rc", "vbr_hq", "-cq", "23", "-rc-lookahead", "20",
+        "-c:v", "h264_nvenc", "-preset", "fast", "-tune", "ull", "-profile:v", "main", "-level", "4.1",
+        "-rgb_mode", "1", "-g", "25", "-bf", "1", "-rc", "vbr_hq", "-cq", "23", "-rc-lookahead", "20",
         "-lookahead_level", "auto", "-no-scenecut", "1", "-temporal-aq", "1", "-spatial-aq", "1", "-aq-strength", "6",
         "-b:v", "10000k", "-maxrate", "13000k", "-bufsize", "26000k",
-        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0",
-        "-vsync", "1",
-        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.05",
-        "-mpegts_flags", "+initial_discontinuity",
+        "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "1",
+        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.05", "-mpegts_flags", "+initial_discontinuity",
         "-bsf:v", "h264_mp4toannexb", "pipe:1"
     ],
     "software_libx264": [
@@ -90,19 +84,18 @@ FFMPEG_PROFILES = {
         "-async", "1",
         "-movflags", "+faststart",
         "pipe:1"
-    ],
+    ]
 }
 
 def detect_hardware_encoder():
-    """Detect hardware encoder available on the host machine."""
     if os.path.exists("/dev/nvidia0"):
-        return "hevc_nvenc"  # Prefer hevc_nvenc if NVIDIA GPU exists
+        return "hevc_nvenc"
     if os.path.exists("/dev/dri/renderD128"):
-        return "h264_qsv"  # Intel QSV (you can add profile if you want)
+        return "h264_qsv"
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
-    profile_name = FFMPEG_PROFILE_NAME or detect_hardware_encoder()
+    profile_name = FFMPEG_PROFILE_NAME.strip() or detect_hardware_encoder()
     profile = FFMPEG_PROFILES.get(profile_name)
     if not profile:
         raise ValueError(f"Unknown ffmpeg profile: {profile_name}")
@@ -126,7 +119,7 @@ class StreamProcess:
         self.process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         self.clients = 0
         self.lock = threading.Lock()
-        self.buffer = queue.Queue(maxsize=200)  # Buffer chunks
+        self.buffer = queue.Queue(maxsize=200)
         self.running = True
         self.thread = threading.Thread(target=self._read_output)
         self.thread.daemon = True
@@ -135,14 +128,16 @@ class StreamProcess:
     def _read_output(self):
         try:
             while self.running:
-                chunk = self.process.stdout.read(1024)
+                if self.process.poll() is not None:
+                    logging.warning(f"ffmpeg exited for {self.stream_url}")
+                    break
+                chunk = self.process.stdout.read(65536)
                 if not chunk:
                     break
                 try:
                     self.buffer.put(chunk, timeout=1)
                 except queue.Full:
-                    # Drop data if buffer full (avoid blocking)
-                    pass
+                    logging.debug(f"Buffer full for {self.stream_url}")
         finally:
             self.running = False
             try:
@@ -151,36 +146,28 @@ class StreamProcess:
                 pass
 
     def get_stream_generator(self):
-        q = queue.Queue()
-
-        def client_reader():
+        def generator():
             try:
                 while self.running:
                     try:
                         chunk = self.buffer.get(timeout=5)
                     except queue.Empty:
-                        # Timeout, assume stream ended
                         break
                     yield chunk
-            except (GeneratorExit, ConnectionError):
-                pass
             finally:
                 self.decrement_clients()
-
-        def generator():
-            for chunk in client_reader():
-                yield chunk
-
         self.increment_clients()
         return generator()
 
     def increment_clients(self):
         with self.lock:
             self.clients += 1
+            logging.info(f"{self.stream_url} clients: {self.clients}")
 
     def decrement_clients(self):
         with self.lock:
             self.clients -= 1
+            logging.info(f"{self.stream_url} clients: {self.clients}")
             if self.clients <= 0:
                 self.shutdown()
 
@@ -190,8 +177,7 @@ class StreamProcess:
             self.process.kill()
         except Exception:
             pass
-        with self.lock:
-            self.clients = 0
+        self.clients = 0
 
 stream_processes = {}
 stream_processes_lock = threading.Lock()
@@ -205,14 +191,12 @@ def stream():
     with stream_processes_lock:
         sp = stream_processes.get(stream_url)
         if sp is None or not sp.running:
-            try:
-                cmd = build_ffmpeg_command(stream_url)
-            except Exception as e:
-                return f"FFmpeg command error: {e}", 500
+            logging.info(f"Spawning new stream for {stream_url}")
+            cmd = build_ffmpeg_command(stream_url)
             sp = StreamProcess(stream_url, cmd)
             stream_processes[stream_url] = sp
 
     return Response(stream_with_context(sp.get_stream_generator()), content_type='video/mp2t')
 
 if __name__ == "__main__":
-    app.run(host=SERVER_HOST, port=SERVER_PORT, threaded=True)
+    app.run(host=SERVER_HOST, port=SERVER_PORT)
