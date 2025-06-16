@@ -1,22 +1,12 @@
 #!/usr/bin/env python3
 
 from flask import Flask, request, Response, stream_with_context
+from urllib.parse import unquote
 import subprocess
 import yaml
 import os
-import threading
-import time
-import logging
-from logging.handlers import RotatingFileHandler
 
 app = Flask(__name__)
-
-# Configure logger
-log_handler = RotatingFileHandler("ffmpeg_errors.log", maxBytes=5*1024*1024, backupCount=3)
-log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
-logger = logging.getLogger("ffmpeg_logger")
-logger.setLevel(logging.INFO)
-logger.addHandler(log_handler)
 
 # Load config
 with open("config.yml", "r") as f:
@@ -31,7 +21,7 @@ FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
-        "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
+        "-fflags", "+genpts+discardcorrupt", "-flush_packets 1", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
@@ -48,7 +38,7 @@ FFMPEG_PROFILES = {
     ],
     "h264_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
-        "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
+        "-fflags", "+genpts+discardcorrupt", "-flush_packets 1", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
@@ -117,53 +107,40 @@ def health():
 
 @app.route('/stream')
 def stream():
-    stream_url = request.args.get("url")
-    if not stream_url:
+    raw_url = request.args.get("url")
+    if not raw_url:
         return "Missing 'url' query parameter", 400
+
+    stream_url = unquote(raw_url)
 
     try:
         ffmpeg_command = build_ffmpeg_command(stream_url)
+        app.logger.info(f"Starting stream with command: {' '.join(ffmpeg_command)}")
     except Exception as e:
-        logger.error(f"Failed to build FFmpeg command: {e}")
+        app.logger.error(f"Failed to build FFmpeg command: {e}")
         return f"Failed to build FFmpeg command: {e}", 500
 
     def generate():
-        process = subprocess.Popen(
-            ffmpeg_command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            bufsize=0
-        )
-
-        def log_stderr(proc):
-            for line in iter(proc.stderr.readline, b''):
-                decoded = line.decode(errors="ignore").strip()
-                if decoded:
-                    logger.error(decoded)
-        threading.Thread(target=log_stderr, args=(process,), daemon=True).start()
-
-        last_data_time = time.time()
-        timeout_seconds = 10
-
-        try:
-            while True:
-                if process.poll() is not None:
-                    break
-
-                output = process.stdout.read(1024)
-                if output:
-                    last_data_time = time.time()
-                    yield output
-                elif time.time() - last_data_time > timeout_seconds:
-                    logger.warning("Timeout: no data from FFmpeg for 10 seconds")
-                    break
-        except GeneratorExit:
-            pass
-        finally:
+        with open("ffmpeg_errors.log", "ab") as err_log:
+            process = subprocess.Popen(
+                ffmpeg_command,
+                stdout=subprocess.PIPE,
+                stderr=err_log,
+                bufsize=0
+            )
             try:
-                process.kill()
-            except Exception:
+                while True:
+                    output = process.stdout.read(1024)
+                    if not output:
+                        break
+                    yield output
+            except GeneratorExit:
                 pass
+            finally:
+                try:
+                    process.kill()
+                except Exception:
+                    pass
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
 
