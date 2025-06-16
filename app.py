@@ -20,7 +20,7 @@ FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
-        "-fflags", "+genpts+discardcorrupt", "-flush_packets 1", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
+        "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
@@ -37,7 +37,7 @@ FFMPEG_PROFILES = {
     ],
     "h264_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
-        "-fflags", "+genpts+discardcorrupt", "-flush_packets 1", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
+        "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
         "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
