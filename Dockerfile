@@ -1,36 +1,35 @@
 # Use NVIDIA base image with CUDA support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Install system dependencies and hardware acceleration libraries
+# Install base build tools and dependencies
 RUN apt-get update && apt-get install -y \
     git build-essential pkg-config cmake \
     yasm nasm libtool autoconf automake \
     libx264-dev libx265-dev libnuma-dev \
     libfdk-aac-dev libmp3lame-dev libopus-dev \
     libssl-dev libass-dev python3-pip \
-    wget curl unzip \
-    libva-dev vainfo i965-va-driver libdrm-dev \
-    intel-media-va-driver-non-free libmfx-dev \
-    mesa-va-drivers \
-    && rm -rf /var/lib/apt/lists/*
+    wget curl unzip && \
+    rm -rf /var/lib/apt/lists/*
 
-# Install Python packages
+# Install Python packages (now including gunicorn)
 COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
 
-# Set working directory for build
+#RUN pip3 install gunicorn
+
+# Set working directory
 WORKDIR /opt
 
-# Build nv-codec-headers (required for CUDA/NVENC)
+# Clone nv-codec-headers (required for --enable-cuda, cuvid, nvenc)
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
     cd .. && rm -rf nv-codec-headers
 
-# Clone FFmpeg source
+# Clone FFmpeg
 RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
-# Build and install FFmpeg with full support
+# Build FFmpeg with required options
 WORKDIR /opt/ffmpeg
 RUN ./configure \
     --prefix=/usr/local \
@@ -46,30 +45,19 @@ RUN ./configure \
     --enable-libopus \
     --enable-openssl \
     --enable-libass \
-    --enable-libmfx \
-    --enable-vaapi \
     --enable-protocol=https \
     --enable-shared && \
     make -j$(nproc) && \
     make install && \
     ldconfig
 
-# Set working directory for app
+# Set workdir for your app
 WORKDIR /app
 
-# Copy your application code
+# Copy your app files (adjust this to your setup)
 COPY . .
 
-# Add optional hardware diagnostics script
-RUN echo '#!/bin/bash\n' \
-         'echo "🛠️ Checking VAAPI support..."\n' \
-         'vainfo || echo "VAAPI not supported or unavailable."\n\n' \
-         'echo "🛠️ Checking FFmpeg hardware acceleration..."\n' \
-         'ffmpeg -hide_banner -hwaccels\n\n' \
-         'echo "🚀 Starting server..."\n' \
-         'exec "$@"' > /entrypoint.sh && \
-    chmod +x /entrypoint.sh
-
-# Run diagnostics then launch app
-ENTRYPOINT ["/entrypoint.sh"]
+# Use Gunicorn instead of python app.py
+#CMD ["gunicorn", "-b", "0.0.0.0:3037", "app:app"]
 CMD ["gunicorn", "-b", "0.0.0.0:3037", "--timeout", "300", "-k", "gevent", "app:app"]
+
