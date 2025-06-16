@@ -82,9 +82,7 @@ FFMPEG_PROFILES = {
 
 def detect_hardware_encoder():
     if os.path.exists("/dev/nvidia0"):
-        return "hevc_nvenc"
-    if os.path.exists("/dev/dri/renderD128"):
-        return "h264_nvenc"
+        return "hevc_nvenc"  # Prefer HEVC on NVIDIA
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
