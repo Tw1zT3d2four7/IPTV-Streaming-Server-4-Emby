@@ -16,58 +16,59 @@ SERVER_HOST = config.get("server", {}).get("host", "0.0.0.0")
 SERVER_PORT = config.get("server", {}).get("port", 3037)
 FFMPEG_PROFILE_NAME = config.get("ffmpeg_profile", "")
 
-# FFmpeg profiles dict
+# FFmpeg profiles 
 FFMPEG_PROFILES = {
     "hevc_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-flush_packets", "1", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
-        "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
+        "-rw_timeout", "5000000",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
-        "-threads", "0", "-thread_queue_size", "1024", "-re",
+        "-threads", "0", "-thread_queue_size", "1024",
         "-i", "{streamUrl}",
         "-map", "0:v:0", "-map", "0:a:0?", "-map", "0:s?",
         "-c:v", "hevc_nvenc", "-preset", "fast", "-tune", "ull", "-profile:v", "main", "-level", "4.1",
-        "-g", "15", "-bf", "1", "-rc", "vbr_hq", "-cq", "21", "-rc-lookahead", "10",
+        "-g", "30", "-bf", "1", "-rc", "vbr_hq", "-cq", "21", "-rc-lookahead", "10",
         "-lookahead_level", "auto", "-no-scenecut", "1", "-temporal-aq", "1", "-spatial-aq", "1", "-aq-strength", "4",
         "-b:v", "6000k", "-maxrate", "7500k", "-bufsize", "12000k",
-        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "passthrough",
-        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.01", "-mpegts_flags", "+initial_discontinuity",
+        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "1",
+        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.1", "-mpegts_flags", "+initial_discontinuity",
         "-bsf:v", "hevc_mp4toannexb", "pipe:1"
     ],
     "h264_nvenc": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-flush_packets", "1", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
-        "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
+        "-rw_timeout", "5000000",
         "-hwaccel", "cuda", "-hwaccel_output_format", "cuda",
-        "-threads", "0", "-thread_queue_size", "1024", "-re",
+        "-threads", "0", "-thread_queue_size", "1024",
         "-i", "{streamUrl}",
         "-map", "0:v:0", "-map", "0:a:0?", "-map", "0:s?",
         "-c:v", "h264_nvenc", "-preset", "fast", "-tune", "ull", "-profile:v", "main", "-level", "4.1",
-        "-g", "15", "-bf", "1", "-rc", "vbr_hq", "-cq", "21", "-rc-lookahead", "10",
+        "-g", "30", "-bf", "1", "-rc", "vbr_hq", "-cq", "21", "-rc-lookahead", "10",
         "-lookahead_level", "auto", "-no-scenecut", "1", "-temporal-aq", "1", "-spatial-aq", "1", "-aq-strength", "4",
         "-b:v", "6000k", "-maxrate", "7500k", "-bufsize", "12000k",
-        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "passthrough",
-        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.01", "-mpegts_flags", "+initial_discontinuity",
+        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "1",
+        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.1", "-mpegts_flags", "+initial_discontinuity",
         "pipe:1"
     ],
     "software_libx264": [
         'ffmpeg', "-hide_banner", "-loglevel", "error", "-probesize", "500000", "-analyzeduration", "1000000",
         "-fflags", "+genpts+discardcorrupt", "-flags", "low_delay", "-flush_packets", "1", "-avoid_negative_ts", "make_zero",
         "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "60", "-timeout", "5000000",
-        "-rw_timeout", "5000000", "-copyts", "-start_at_zero",
-        "-threads", "0", "-thread_queue_size", "1024", "-re",
+        "-rw_timeout", "5000000",
+        "-threads", "0", "-thread_queue_size", "1024",
         "-i", "{streamUrl}",
         "-map", "0:v:0", "-map", "0:a:0?", "-map", "0:s?",
         "-c:v", "libx264", "-preset", "veryfast", "-tune", "zerolatency", "-profile:v", "main", "-level", "4.1",
-        "-g", "15", "-bf", "1",
+        "-g", "30", "-bf", "1",
         "-b:v", "6000k", "-maxrate", "7500k", "-bufsize", "12000k",
-        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "passthrough",
-        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.01", "-mpegts_flags", "+initial_discontinuity",
+        "-c:a", "libfdk_aac", "-vbr", "4", "-b:a", "128k", "-ac", "2", "-af", "aresample=async=0", "-vsync", "1",
+        "-f", "mpegts", "-muxrate", "0", "-muxdelay", "0.1", "-mpegts_flags", "+initial_discontinuity",
         "pipe:1"
     ]
 }
+
 
 
 def detect_hardware_encoder():
