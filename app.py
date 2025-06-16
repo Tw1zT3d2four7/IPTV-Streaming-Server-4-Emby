@@ -1,12 +1,10 @@
-import os
 import yaml
 import subprocess
-import threading
 from flask import Flask, Response, request, abort
 
 app = Flask(__name__)
 
-# Load config.yml
+# Load config.yml once at startup
 with open("config.yml", "r") as f:
     config = yaml.safe_load(f)
 
@@ -15,7 +13,6 @@ DEFAULT_PROFILE = config["streaming"].get("default_profile")
 QUEUE_SIZE = config["streaming"].get("queue_size", 100)
 
 def detect_gpu_profile():
-    # Check NVIDIA GPU
     try:
         subprocess.run(["nvidia-smi"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
         if "h264_nvenc" in FFMPEG_PROFILES:
@@ -25,7 +22,6 @@ def detect_gpu_profile():
     except Exception:
         pass
 
-    # Check Intel QSV
     try:
         result = subprocess.run(["ffmpeg", "-hide_banner", "-hwaccels"], capture_output=True, text=True)
         if "qsv" in result.stdout:
@@ -36,7 +32,6 @@ def detect_gpu_profile():
     except Exception:
         pass
 
-    # Check VAAPI (Intel/AMD)
     try:
         result = subprocess.run(["vainfo"], capture_output=True, text=True)
         if result.returncode == 0:
@@ -47,30 +42,25 @@ def detect_gpu_profile():
     except Exception:
         pass
 
-    # Fallback software
     if "libx264" in FFMPEG_PROFILES:
         return "libx264"
     if "libx265" in FFMPEG_PROFILES:
         return "libx265"
 
-    # Last resort - first profile
     return list(FFMPEG_PROFILES.keys())[0]
 
 def build_ffmpeg_command(stream_url, profile_key):
-    profile_cmd = FFMPEG_PROFILES.get(profile_key)
-    if not profile_cmd:
+    profile = FFMPEG_PROFILES.get(profile_key)
+    if not profile:
         raise ValueError(f"FFmpeg profile '{profile_key}' not found.")
-    
-    # Add -fflags +nobuffer to reduce latency/buffering issues
-    # and improve stream stability
-    cmd_str = profile_cmd["ffmpeg_args"]
+
+    cmd_str = profile["ffmpeg_args"]
+
     if "-fflags" not in cmd_str:
         cmd_str = cmd_str.replace("ffmpeg ", "ffmpeg -fflags +nobuffer ")
 
-    # Format the command with stream URL
     cmd_str = cmd_str.format(streamUrl=stream_url)
 
-    # Return as list for subprocess.Popen
     return ["ffmpeg"] + cmd_str.split()
 
 @app.route("/stream")
@@ -81,7 +71,6 @@ def stream():
     if not url:
         abort(400, "Missing ?url parameter.")
 
-    # Auto-detect GPU if no profile specified
     if not profile:
         profile = detect_gpu_profile()
 
@@ -100,7 +89,7 @@ def stream():
                 bufsize=QUEUE_SIZE * 1024
             )
             while True:
-                chunk = process.stdout.read(65536)  # bigger chunk for faster buffering
+                chunk = process.stdout.read(65536)
                 if not chunk:
                     break
                 yield chunk
