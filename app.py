@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 from flask import Flask, request, Response, stream_with_context
-from urllib.parse import unquote
 import subprocess
 import yaml
 import os
@@ -83,7 +82,7 @@ FFMPEG_PROFILES = {
 
 def detect_hardware_encoder():
     if os.path.exists("/dev/nvidia0"):
-        return "hevc_nvenc"
+        return "hevc_nvenc"  # Prefer HEVC on NVIDIA
     return "software_libx264"
 
 def build_ffmpeg_command(stream_url: str):
@@ -107,40 +106,35 @@ def health():
 
 @app.route('/stream')
 def stream():
-    raw_url = request.args.get("url")
-    if not raw_url:
+    stream_url = request.args.get("url")
+    if not stream_url:
         return "Missing 'url' query parameter", 400
-
-    stream_url = unquote(raw_url)
 
     try:
         ffmpeg_command = build_ffmpeg_command(stream_url)
-        app.logger.info(f"Starting stream with command: {' '.join(ffmpeg_command)}")
     except Exception as e:
-        app.logger.error(f"Failed to build FFmpeg command: {e}")
         return f"Failed to build FFmpeg command: {e}", 500
 
     def generate():
-        with open("ffmpeg_errors.log", "ab") as err_log:
-            process = subprocess.Popen(
-                ffmpeg_command,
-                stdout=subprocess.PIPE,
-                stderr=err_log,
-                bufsize=0
-            )
+        process = subprocess.Popen(
+            ffmpeg_command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            bufsize=0
+        )
+        try:
+            while True:
+                output = process.stdout.read(1024)
+                if not output:
+                    break
+                yield output
+        except GeneratorExit:
+            pass
+        finally:
             try:
-                while True:
-                    output = process.stdout.read(1024)
-                    if not output:
-                        break
-                    yield output
-            except GeneratorExit:
+                process.kill()
+            except Exception:
                 pass
-            finally:
-                try:
-                    process.kill()
-                except Exception:
-                    pass
 
     return Response(stream_with_context(generate()), content_type='video/mp2t')
 
