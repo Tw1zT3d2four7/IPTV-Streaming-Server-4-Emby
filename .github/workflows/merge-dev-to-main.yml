@@ -13,22 +13,22 @@ jobs:
         with:
           ref: dev
           fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}  # Must have repo scope
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
 
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Add main branch remote and fetch
+      - name: Add and fetch main branch
         run: |
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main
 
-      - name: Create temp merge branch from main
+      - name: Create temporary merge branch
         run: |
           git checkout -b merge-temp upstream/main
-          git merge dev --no-commit || true  # Merge dev into temp branch
+          git merge dev --no-commit || true
 
       - name: Restore protected files from main
         run: |
@@ -36,12 +36,19 @@ jobs:
           git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
-      - name: Commit merge changes
+      - name: Commit selective merge
         run: |
-          git commit -am "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
+          git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
 
-      - name: Push merge to main branch
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v1
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.CR_PAT }}
+
+      - name: Push to main branch
         env:
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          git push https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
