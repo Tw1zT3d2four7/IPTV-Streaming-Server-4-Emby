@@ -42,6 +42,13 @@ jobs:
         run: |
           git commit -m "Selective merge from dev to main" || echo "No changes to commit"
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
       - name: Push to main with PAT
         run: |
           git remote set-url origin https://x-access-token:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/Tw1zT3d2four7/IPTV-Streaming-Server-4-Emby.git
