@@ -27,9 +27,9 @@ jobs:
         run: |
           docker build \
             --pull \
-            --tag ghcr.io/${{ env.LOWERCASE_OWNER }}/iptv-streaming-server-4-emby:latest \
+            --tag ghcr.io/${{ env.LOWERCASE_OWNER }}/iptv-streaming-server-4-emby:dev \
             .
 
       - name: 🚀 Push Docker image to GHCR
         run: |
-          docker push ghcr.io/${{ env.LOWERCASE_OWNER }}/iptv-streaming-server-4-emby:latest
+          docker push ghcr.io/${{ env.LOWERCASE_OWNER }}/iptv-streaming-server-4-emby:dev
