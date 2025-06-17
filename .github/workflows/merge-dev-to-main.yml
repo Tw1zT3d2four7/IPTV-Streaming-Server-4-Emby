@@ -14,6 +14,7 @@ jobs:
           ref: dev
           fetch-depth: 0
           token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          persist-credentials: false  # Important to use your PAT for push later
 
       - name: Configure Git
         run: |
@@ -39,16 +40,6 @@ jobs:
       - name: Commit merge changes
         run: |
           git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
-
-      - name: Set lowercase owner
-        run: echo "LOWERCASE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v2
-        with:
-          registry: ghcr.io
-          username: ${{ github.repository_owner }}
-          password: ${{ secrets.GHCR_PAT }}
 
       - name: Push merge to main branch
         env:
