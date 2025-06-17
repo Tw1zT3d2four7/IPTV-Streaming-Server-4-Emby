@@ -18,8 +18,6 @@ services:
       - ./config.yml:/app/config.yml:ro
       - ./playlist_local.m3u:/app/playlist_local.m3u:ro
     runtime: nvidia
-    devices:
-      - /dev/dri:/dev/dri
     deploy:
       resources:
         reservations:
