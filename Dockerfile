@@ -57,6 +57,14 @@ WORKDIR /app
 # Copy your app files (adjust this to your setup)
 COPY . .
 
+# Create a virtual environment and install dependencies inside it
+RUN python3 -m venv /venv  # Create virtual environment
+RUN /venv/bin/pip install --upgrade pip  # Upgrade pip
+RUN /venv/bin/pip install -r requirements.txt  # Install dependencies inside venv
+
+# Set the virtual environment path for running the app
+ENV PATH="/venv/bin:$PATH"
+
 # Use Gunicorn instead of python app.py
 #CMD ["gunicorn", "-b", "0.0.0.0:3037", "app:app"]
 CMD ["gunicorn", "-b", "0.0.0.0:3037", "--timeout", "300", "-k", "gevent", "app:app"]
