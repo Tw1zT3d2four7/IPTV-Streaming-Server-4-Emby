@@ -7,6 +7,7 @@ server:
 
 # Optional: override hardware detection by explicitly specifying the profile here
 # Leave empty to auto-detect hardware
-# Options: hevc_nvenc, h264_nvenc & software_libx264
+# Options: hevc_nvenc, h264_nvenc, software_libx264
 ffmpeg_profile: ""
+
 
