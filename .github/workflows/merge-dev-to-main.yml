@@ -49,6 +49,6 @@ jobs:
 
       - name: Push merge to main branch
         env:
-          TOKEN: ${{ secrets.GH_PAT }}
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
