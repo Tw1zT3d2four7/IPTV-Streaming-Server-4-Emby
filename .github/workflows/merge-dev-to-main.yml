@@ -8,39 +8,42 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout dev
+      - name: Checkout dev branch
         uses: actions/checkout@v4
         with:
           ref: dev
           fetch-depth: 0
           token: ${{ secrets.GH_PAT }}
 
-      - name: Set up Git config
+      - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Add and fetch main
+      - name: Add main branch remote and fetch
         run: |
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main
 
-      - name: Create temp merge branch
+      - name: Create temp merge branch from main
         run: |
           git checkout -b merge-temp upstream/main
           git merge dev --no-commit || true
 
-      - name: Restore protected files
+      - name: Restore protected files from main
         run: |
           git restore --source=upstream/main -- trigger.txt
           git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
-      - name: Commit changes
+      - name: Commit merge changes
         run: |
-          git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes"
+          git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
 
-      - name: Push to main
+      - name: Login to GHCR
+        run: docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
+
+      - name: Push merge to main branch
         env:
           TOKEN: ${{ secrets.GH_PAT }}
         run: |
