@@ -1,0 +1,49 @@
+name: Merge Dev into Main (Selective)
+
+on:
+  workflow_dispatch:  # Manual trigger
+  push:
+    branches:
+      - dev
+
+jobs:
+  selective-merge:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Add main as remote-tracking branch
+        run: |
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream main
+
+      - name: Create merge branch
+        run: |
+          git checkout -b merge-temp upstream/main
+          git merge dev --no-commit || true
+
+      - name: Restore files from main
+        run: |
+          git restore --source=upstream/main -- triggers.txt
+          git restore --source=upstream/main -- .github/workflows/
+
+      - name: Commit merge
+        run: |
+          git commit -m "Selective merge from dev to main" || echo "No changes to commit"
+
+      - name: Push to main
+        env:
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        run: |
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
+
