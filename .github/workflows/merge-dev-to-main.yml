@@ -1,7 +1,7 @@
 name: Merge Dev into Main (Selective)
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Manual trigger
   push:
     branches:
       - dev
@@ -24,21 +24,21 @@ jobs:
 
       - name: Add main as remote-tracking branch
         run: |
-          git remote add upstream https://github.com/${{ github.repository }}.git
+          git remote add upstream https://github.com/Tw1zT3d2four7/IPTV-Streaming-Server-4-Emby.git
           git fetch upstream main
 
-      - name: Create merge branch
+      - name: Create merge branch from main
         run: |
           git checkout -b merge-temp upstream/main
           git merge dev --no-commit || true
 
-      - name: Restore files from main
+      - name: Restore protected files from main
         run: |
           git restore --source=upstream/main -- trigger.txt
           git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
-      - name: Commit merge
+      - name: Commit changes (if any)
         run: |
           git commit -m "Selective merge from dev to main" || echo "No changes to commit"
 
@@ -46,5 +46,5 @@ jobs:
         env:
           TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          git remote set-url origin https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git
+          git remote set-url origin https://x-access-token:${TOKEN}@github.com/Tw1zT3d2four7/IPTV-Streaming-Server-4-Emby.git
           git push origin HEAD:main
