@@ -4,7 +4,7 @@ import urllib.parse
 
 INPUT_FILE = "playlist_local.m3u"
 OUTPUT_FILE = "playlist_local_encoded.m3u"
-STREAM_PREFIX = "http://192.168.1.11:3037/stream?url="
+STREAM_PREFIX = "http://0.0.0.0:3037/stream?url="
 
 def fix_playlist():
     with open(INPUT_FILE, "r", encoding="utf-8") as infile, open(OUTPUT_FILE, "w", encoding="utf-8") as outfile:
