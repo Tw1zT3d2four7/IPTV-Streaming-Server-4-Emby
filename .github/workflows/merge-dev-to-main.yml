@@ -13,19 +13,19 @@ jobs:
         with:
           ref: dev
           fetch-depth: 0
-          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          token: ${{ secrets.GHCR_PAT }}
 
       - name: Configure Git
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Add and fetch main branch
+      - name: Add main branch remote and fetch
         run: |
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main
 
-      - name: Create temporary merge branch
+      - name: Create temp merge branch from main
         run: |
           git checkout -b merge-temp upstream/main
           git merge dev --no-commit || true
@@ -36,19 +36,22 @@ jobs:
           git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
-      - name: Commit selective merge
+      - name: Commit merge changes
         run: |
           git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
 
+      - name: Set lowercase owner
+        run: echo "LOWERCASE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
+
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
-          password: ${{ secrets.CR_PAT }}
+          password: ${{ secrets.GHCR_PAT }}
 
-      - name: Push to main branch
+      - name: Push merge to main branch
         env:
-          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+          TOKEN: ${{ secrets.GHCR_PAT }}
         run: |
           git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
