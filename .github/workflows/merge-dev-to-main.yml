@@ -8,19 +8,19 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout dev branch
+      - name: Checkout dev
         uses: actions/checkout@v4
         with:
           ref: dev
           fetch-depth: 0
-          token: ${{ secrets.GHCR_TOKEN }}
+          token: ${{ secrets.GH_PAT }}
 
-      - name: Configure Git
+      - name: Set up Git config
         run: |
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
 
-      - name: Add and fetch main branch
+      - name: Add and fetch main
         run: |
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main
@@ -30,16 +30,18 @@ jobs:
           git checkout -b merge-temp upstream/main
           git merge dev --no-commit || true
 
-      - name: Restore protected files from main
+      - name: Restore protected files
         run: |
           git restore --source=upstream/main -- trigger.txt
           git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
-      - name: Commit selective merge
+      - name: Commit changes
         run: |
-          git commit -m "Selective merge dev → main (preserving critical files)" || echo "No changes to commit"
+          git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes"
 
-      - name: Push to main branch
+      - name: Push to main
+        env:
+          TOKEN: ${{ secrets.GH_PAT }}
         run: |
-          git push https://x-access-token:${{ secrets.GHCR_TOKEN }}@github.com/${{ github.repository }}.git HEAD:main
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
