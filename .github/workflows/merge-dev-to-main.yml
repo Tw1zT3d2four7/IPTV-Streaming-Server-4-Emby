@@ -1,24 +1,57 @@
-name: GHCR Login Test
+name: Selective Merge Dev to Main
 
 on:
   workflow_dispatch:
 
 jobs:
-  ghcr-login-test:
+  selective-merge:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 🔧 Set lowercase owner
+      - name: Checkout dev branch
+        uses: actions/checkout@v4
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+
+      - name: Add main branch remote and fetch
+        run: |
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream main
+
+      - name: Create temp merge branch from main
+        run: |
+          git checkout -b merge-temp upstream/main
+          git merge dev --no-commit || true
+
+      - name: Restore protected files from main
+        run: |
+          git restore --source=upstream/main -- trigger.txt
+          git restore --source=upstream/main -- docker-compose.yml
+          git restore --source=upstream/main -- .github/workflows/
+
+      - name: Commit merge changes
+        run: |
+          git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
+
+      - name: Set lowercase owner
         run: echo "LOWERCASE_OWNER=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_ENV
 
-      - name: ✅ Test login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v2
         with:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GHCR_PAT }}
 
-      - name: ✅ Check login success
+      - name: Push merge to main branch
+        env:
+          TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
         run: |
-          echo "Testing docker pull permissions..."
-          docker pull ghcr.io/${{ env.LOWERCASE_OWNER }}/nonexistent-image || echo "Login success, image doesn't exist (expected)"
+          git push https://x-access-token:${TOKEN}@github.com/${{ github.repository }}.git HEAD:main
