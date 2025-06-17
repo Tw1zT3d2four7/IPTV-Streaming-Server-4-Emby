@@ -40,8 +40,8 @@ jobs:
         run: |
           git commit -m "Selective merge dev → main (preserving key files)" || echo "No changes to commit"
 
-      - name: Login to GHCR
-        run: docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
+      - name: Login to GHCR with sudo
+        run: sudo docker login ghcr.io -u ${{ secrets.GHCR_USERNAME }} -p ${{ secrets.GHCR_TOKEN }}
 
       - name: Push merge to main branch
         env:
