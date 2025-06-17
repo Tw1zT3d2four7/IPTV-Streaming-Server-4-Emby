@@ -34,7 +34,8 @@ jobs:
 
       - name: Restore files from main
         run: |
-          git restore --source=upstream/main -- triggers.txt
+          git restore --source=upstream/main -- trigger.txt
+          git restore --source=upstream/main -- docker-compose.yml
           git restore --source=upstream/main -- .github/workflows/
 
       - name: Commit merge
