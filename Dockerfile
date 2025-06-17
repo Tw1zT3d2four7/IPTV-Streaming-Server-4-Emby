@@ -1,35 +1,34 @@
 # Use NVIDIA base image with CUDA support
 FROM nvidia/cuda:12.4.1-devel-ubuntu22.04
 
-# Install base build tools and dependencies
+# Install base build tools and dependencies, including python3-venv
 RUN apt-get update && apt-get install -y \
     git build-essential pkg-config cmake \
     yasm nasm libtool autoconf automake \
     libx264-dev libx265-dev libnuma-dev \
     libfdk-aac-dev libmp3lame-dev libopus-dev \
-    libssl-dev libass-dev python3-pip \
+    libssl-dev libass-dev \
+    python3-pip python3-venv \
     wget curl unzip && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python packages (now including gunicorn)
+# Install Python packages (initially via system pip3)
 COPY requirements.txt /tmp/
 RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
-
-#RUN pip3 install gunicorn
 
 # Set working directory
 WORKDIR /opt
 
-# Clone nv-codec-headers (required for --enable-cuda, cuvid, nvenc)
+# Clone nv-codec-headers (required for FFmpeg CUDA support)
 RUN git clone https://github.com/FFmpeg/nv-codec-headers.git && \
     cd nv-codec-headers && \
     make && make install && \
     cd .. && rm -rf nv-codec-headers
 
-# Clone FFmpeg
+# Clone FFmpeg source
 RUN git clone https://github.com/FFmpeg/FFmpeg.git ffmpeg
 
-# Build FFmpeg with required options
+# Build FFmpeg with necessary options
 WORKDIR /opt/ffmpeg
 RUN ./configure \
     --prefix=/usr/local \
@@ -51,21 +50,19 @@ RUN ./configure \
     make install && \
     ldconfig
 
-# Set workdir for your app
+# Set working directory for your app
 WORKDIR /app
 
-# Copy your app files (adjust this to your setup)
+# Copy your app source code
 COPY . .
 
-# Create a virtual environment and install dependencies inside it
-RUN python3 -m venv /venv  # Create virtual environment
-RUN /venv/bin/pip install --upgrade pip  # Upgrade pip
-RUN /venv/bin/pip install -r requirements.txt  # Install dependencies inside venv
+# Create Python virtual environment and install dependencies
+RUN python3 -m venv /venv
+RUN /venv/bin/pip install --upgrade pip
+RUN /venv/bin/pip install -r requirements.txt
 
-# Set the virtual environment path for running the app
+# Set the virtual environment path
 ENV PATH="/venv/bin:$PATH"
 
-# Use Gunicorn instead of python app.py
-#CMD ["gunicorn", "-b", "0.0.0.0:3037", "app:app"]
+# Run the app with Gunicorn
 CMD ["gunicorn", "-b", "0.0.0.0:3037", "--timeout", "300", "-k", "gevent", "app:app"]
-
